@@ -59,6 +59,7 @@ class MainApplication : Application() {
         fun MutablePreferences.setLastGas(value: Int) {
             set(LAST_GAS, value)
             set(LAST_UPDATE, System.currentTimeMillis())
+            // intentionally don't call set(HAS_NOTIFIED, true) here so you continue getting notified every 15 minutes while gas is cheap
         }
 
     }
