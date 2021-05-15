@@ -35,6 +35,7 @@ class MainApplication : Application() {
         private val LAST_GAS = intPreferencesKey("App_LAST_GAS")
         private val LAST_UPDATE = longPreferencesKey("App_LAST_UPDATE")
         private val HAS_NOTIFIED = booleanPreferencesKey("App_HAS_NOTIFIED")
+        private val RECENT_GAS_VALUES_STRING = stringPreferencesKey("App_RECENT_GAS_VALUES_STRING")
 
         const val DEFAULT_GAS = 70
         const val MAX_GAS = 500f
@@ -45,6 +46,8 @@ class MainApplication : Application() {
         fun Preferences.gasPrice() = get(GAS_PRICE) ?: DEFAULT_GAS
         fun Preferences.lastGas() = get(LAST_GAS) ?: -1
         fun Preferences.lastUpdate() = get(LAST_UPDATE) ?: System.currentTimeMillis()
+        fun Preferences.recentGasValues(): List<Int> =
+            get(RECENT_GAS_VALUES_STRING)?.split(',')?.map { it.toInt() } ?: List(50) { 0 }
 
         fun MutablePreferences.setGasPrice(value: Int) {
             set(GAS_PRICE, value)
@@ -56,7 +59,8 @@ class MainApplication : Application() {
             set(HAS_NOTIFIED, false)
         }
 
-        fun MutablePreferences.setLastGas(value: Int) {
+        fun MutablePreferences.setLastGas(value: Int, recent: List<Int>) {
+            set(RECENT_GAS_VALUES_STRING, recent.reversed().joinToString(",") { it.toString() })
             set(LAST_GAS, value)
             set(LAST_UPDATE, System.currentTimeMillis())
             // intentionally don't call set(HAS_NOTIFIED, true) here so you continue getting notified every 15 minutes while gas is cheap
@@ -87,7 +91,7 @@ class MainApplication : Application() {
 }
 
 const val GET_URL =
-    "https://data-api.defipulse.com/api/v1/egs/api/ethgasAPI.json?api-key="
+    "https://gas.ibolpap.finance/gas_price"
 
 const val CHANNEL_ID = "App_CHANNEL_ID"
 
@@ -95,7 +99,7 @@ class PeriodicUpdate(context: Context, workerParameters: WorkerParameters) :
     CoroutineWorker(context, workerParameters) {
 
     @Serializable
-    data class Response(val average: Int)
+    data class Response(val average: Int, val recent: List<Int>)
 
     private fun notifyGasLower(latest: Int) {
         val name = "Notifications"
@@ -123,9 +127,9 @@ class PeriodicUpdate(context: Context, workerParameters: WorkerParameters) :
                 this.ignoreUnknownKeys = true
             }
             val response = GET_URL.httpGet().await(kotlinxDeserializerOf<Response>(json = json))
-            val latest = (response.average / 10)
+            val latest = (response.average / 10) // responses are 10x as eth gas station returns
             applicationContext.prefs.edit { prefs ->
-                prefs.setLastGas(latest)
+                prefs.setLastGas(latest, response.recent.map { it / 10 })
                 if (prefs.contains(GAS_PRICE) && prefs.shouldNotify() && prefs.gasPrice() > latest) {
                     notifyGasLower(latest)
                 }

@@ -1,9 +1,10 @@
 package com.github.hjubb.gastracker
 
-import android.content.res.Configuration.UI_MODE_NIGHT_NO
 import android.content.res.Configuration.UI_MODE_NIGHT_YES
 import android.os.Bundle
 import android.text.format.DateUtils
+import android.view.ViewGroup
+import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
@@ -22,8 +23,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.datastore.preferences.core.edit
 import com.github.hjubb.gastracker.MainApplication.Companion.DEFAULT_GAS
 import com.github.hjubb.gastracker.MainApplication.Companion.MAX_GAS
@@ -32,9 +35,11 @@ import com.github.hjubb.gastracker.MainApplication.Companion.lastGas
 import com.github.hjubb.gastracker.MainApplication.Companion.lastUpdate
 import com.github.hjubb.gastracker.MainApplication.Companion.notificationsEnabled
 import com.github.hjubb.gastracker.MainApplication.Companion.prefs
+import com.github.hjubb.gastracker.MainApplication.Companion.recentGasValues
 import com.github.hjubb.gastracker.MainApplication.Companion.setGasPrice
 import com.github.hjubb.gastracker.MainApplication.Companion.setIsNotifEnabled
 import com.github.hjubb.gastracker.ui.theme.GasTrackerTheme
+import com.majorik.sparklinelibrary.SparkLineLayout
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -52,13 +57,14 @@ class MainActivity : ComponentActivity() {
                 notifsEnabled = it.notificationsEnabled(),
                 gasPrice = it.gasPrice(),
                 lastGas = it.lastGas(),
-                lastUpdate = it.lastUpdate()
+                lastUpdate = it.lastUpdate(),
+                recentGasValues = it.recentGasValues()
             )
         }
         setContent {
             val timer by produceState(initialValue = System.currentTimeMillis()) {
                 while (isActive) {
-                    delay(1_000)
+                    delay(10_000)
                     value = System.currentTimeMillis()
                 }
             }
@@ -72,8 +78,29 @@ data class AppState(
     val notifsEnabled: Boolean,
     val gasPrice: Int,
     val lastGas: Int,
-    val lastUpdate: Long
+    val lastUpdate: Long,
+    val recentGasValues: List<Int>
 )
+
+@Composable
+fun GasChart(recentGasValues: List<Int>) {
+
+    AndroidView(modifier = Modifier
+        .height(150.dp)
+        .padding(bottom = 20.dp)
+        .fillMaxWidth()
+        .padding(horizontal = 50.dp), factory = { context ->
+        val chart = SparkLineLayout(context)
+        chart.layoutParams = ViewGroup.LayoutParams(MATCH_PARENT, MATCH_PARENT)
+        chart.sparkLineThickness = 3f * Density(context).density
+        chart.sparkLineBezier = 0.1f
+        chart.sparkLineColor = context.getColor(R.color.primary)
+        chart
+    }, update = { chart ->
+        chart.setData(arrayListOf(*recentGasValues.toTypedArray()))
+        chart.invalidate()
+    })
+}
 
 @Composable
 fun AppScaffold(dataFlow: Flow<AppState>, ticker: Long) =
@@ -97,6 +124,9 @@ fun AppScaffold(dataFlow: Flow<AppState>, ticker: Long) =
             .map { it.lastUpdate }
             .collectAsState(initial = 0)
 
+        val recentGasValues by remember { dataFlow.map { it.recentGasValues } }
+            .collectAsState(initial = List(50) { 0 })
+
         val context = LocalContext.current
 
         val lastUpdateTime = DateUtils.getRelativeDateTimeString(
@@ -116,10 +146,12 @@ fun AppScaffold(dataFlow: Flow<AppState>, ticker: Long) =
         }
 
         Column(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = 100.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
         ) {
+            GasChart(recentGasValues = recentGasValues)
             Text(
                 color = MaterialTheme.colors.onSurface,
                 fontSize = 20.sp,
@@ -184,7 +216,15 @@ fun DefaultPreview() {
     }
 
     AppScaffold(
-        flowOf(AppState(true, 70, 500, System.currentTimeMillis())),
+        flowOf(
+            AppState(
+                true,
+                70,
+                500,
+                System.currentTimeMillis(),
+                List(50) { 0 }
+            )
+        ),
         timer
     )
 }

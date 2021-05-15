@@ -11,8 +11,8 @@ android {
         applicationId "com.github.hjubb.gastracker"
         minSdk 26
         targetSdk 30
-        versionCode 1
-        versionName "1.0"
+        versionCode 2
+        versionName "1.0.1"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -67,5 +67,6 @@ dependencies {
     implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.2.1"
     implementation "com.android.support:support-compat:28.0.0"
 
+    implementation 'com.github.majorkik:SparkLineLayout:1.0.1'
 
 }
